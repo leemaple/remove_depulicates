@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频处理服务</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .upload-form {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .progress {
+            display: none;
+            margin: 1rem 0;
+        }
+        #result {
+            display: none;
+            margin-top: 2rem;
+        }
+        .video-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="upload-form">
+            <h2 class="text-center mb-4">视频处理服务</h2>
+            
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="video" class="form-label">选择视频文件</label>
+                    <input type="file" class="form-control" id="video" name="video" accept="video/mp4,video/x-m4v,video/*" required>
+                    <div class="form-text">支持的格式：MP4, MOV, AVI, MKV（最大500MB）</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="rotation_angle" class="form-label">旋转角度</label>
+                    <input type="number" class="form-control" id="rotation_angle" name="rotation_angle" value="2" step="0.1" required>
+                    <div class="form-text">视频旋转的角度（度）</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="frame_interval" class="form-label">帧间隔</label>
+                    <input type="number" class="form-control" id="frame_interval" name="frame_interval" value="10" min="1" required>
+                    <div class="form-text">删除非关键帧的间隔帧数</div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary w-100">开始处理</button>
+            </form>
+            
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+            </div>
+            
+            <div id="result">
+                <div class="alert alert-success">
+                    <h5>处理完成！</h5>
+                    <div class="video-info"></div>
+                    <div class="mt-3">
+                        <a href="#" class="btn btn-success download-btn">下载处理后的视频</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const form = e.target;
+            const formData = new FormData(form);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const progress = document.querySelector('.progress');
+            const result = document.getElementById('result');
+            
+            // 显示进度条，禁用提交按钮
+            submitBtn.disabled = true;
+            progress.style.display = 'block';
+            result.style.display = 'none';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // 显示处理结果
+                const videoInfo = data.video_info;
+                const infoHtml = `
+                    <p><strong>文件大小：</strong>${(videoInfo.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p><strong>分辨率：</strong>${videoInfo.width} x ${videoInfo.height}</p>
+                    <p><strong>时长：</strong>${videoInfo.duration.toFixed(2)} 秒</p>
+                `;
+                
+                result.querySelector('.video-info').innerHTML = infoHtml;
+                result.querySelector('.download-btn').href = `/download/${data.output_filename}`;
+                result.style.display = 'block';
+                
+                // 下载完成后自动清理服务器文件
+                result.querySelector('.download-btn').addEventListener('click', async () => {
+                    setTimeout(async () => {
+                        try {
+                            await fetch(`/cleanup/${data.output_filename}`, {
+                                method: 'DELETE'
+                            });
+                        } catch (error) {
+                            console.error('清理文件失败：', error);
+                        }
+                    }, 5000); // 等待5秒后清理，确保下载已开始
+                });
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert('处理视频时发生错误：' + error.message);
+            } finally {
+                // 恢复提交按钮，隐藏进度条
+                submitBtn.disabled = false;
+                progress.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html> 
